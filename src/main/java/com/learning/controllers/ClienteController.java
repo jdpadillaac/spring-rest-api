@@ -1,15 +1,21 @@
 package com.learning.controllers;
 
+import java.util.ArrayList;
 import java.util.Date;
 import java.util.List;
+import java.util.stream.Collectors;
 
-import com.google.gson.Gson;
-import com.google.gson.JsonObject;
+import javax.validation.Valid;
+
 import com.learning.models.Cliente;
 import com.learning.models.JsonResp;
 import com.learning.service.cliente.ClienteService;
 import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.dao.DataAccessException;
 import org.springframework.http.HttpStatus;
+import org.springframework.http.ResponseEntity;
+import org.springframework.validation.BindingResult;
+import org.springframework.validation.FieldError;
 import org.springframework.web.bind.annotation.CrossOrigin;
 import org.springframework.web.bind.annotation.DeleteMapping;
 import org.springframework.web.bind.annotation.GetMapping;
@@ -36,30 +42,89 @@ public class ClienteController {
     }
 
     @GetMapping("/clientes")
-    public List<Cliente> index() {
-        return clienteSerivice.findAll();
+    public ResponseEntity<JsonResp> index() {
+
+        List<Cliente> clienteList;
+
+        try {
+            clienteList = clienteSerivice.findAll();
+        } catch (DataAccessException e) {
+
+            resp.success = false;
+            resp.message = "Error en la base de datos al consultar lista de clientes";
+            resp.error = e.getMessage().concat(": ").concat(e.getMostSpecificCause().getMessage());
+            return new ResponseEntity<JsonResp>(resp, HttpStatus.INTERNAL_SERVER_ERROR);
+        }
+
+        resp.message = "Clientes cargado correctamente";
+        resp.success = true;
+        resp.data = clienteList;
+        return new ResponseEntity<JsonResp>(resp, HttpStatus.OK);
     }
 
+
+
+
     @GetMapping("/clientes/{id}")
-    public JsonResp showById(@PathVariable Long id) {
+    public ResponseEntity<JsonResp> showById(@PathVariable Long id) {
 
-        Cliente cliente = clienteSerivice.findById(id);
-
-        JsonResp resp = new JsonResp();
+        Cliente cliente = null;
+        try {
+            cliente = clienteSerivice.findById(id);
+        } catch (DataAccessException e) {
+            resp.success = false;
+            resp.message = "Error en la base de datos al consultar cliente con id " + id;
+            resp.error = e.getMessage().concat(": ").concat(e.getMostSpecificCause().getMessage());
+            return new ResponseEntity<JsonResp>(resp, HttpStatus.INTERNAL_SERVER_ERROR);
+        }
 
         resp.success = true;
         resp.message = "ok";
         resp.data = cliente;
-
-        return resp;    
+        return new ResponseEntity<>(resp, HttpStatus.OK);    
     }
 
     @PostMapping("/clientes/crear")
     @ResponseStatus(HttpStatus.CREATED)
-    public Cliente create(@RequestBody Cliente cliente) {
-        cliente.setCreateAt(new Date());
-        return clienteSerivice.save(cliente);
+    public ResponseEntity<JsonResp> create(@Valid @RequestBody Cliente cliente, BindingResult result) {
 
+        cliente.setCreateAt(new Date());
+        Cliente clienteNew;
+
+
+        if (result.hasErrors()) {
+
+            // List<String> errors = new ArrayList<>();
+            // for (FieldError err : result.getFieldErrors()) {
+            //     errors.add("El campo '" + err.getField() + "' " + err.getDefaultMessage());
+            // };
+
+            List<String> errors = result.getFieldErrors()
+            .stream()
+            .map(err -> "El campo '" + err.getField() + "' " + err.getDefaultMessage())
+            .collect(Collectors.toList());
+
+            resp.success = false;
+            resp.message = "Error de validación - Datos enviados incorrectamente";
+            resp.error = errors;
+            return new ResponseEntity<JsonResp>(resp, HttpStatus.BAD_REQUEST);
+        }
+
+        try {
+            clienteNew = clienteSerivice.save(cliente);
+        } catch (DataAccessException e) {
+            resp.success = false;
+            resp.message = "Error en la base de datos al crear cliente";
+            resp.error = e.getMessage().concat(": ").concat(e.getMostSpecificCause().getMessage());
+            return new ResponseEntity<JsonResp>(resp, HttpStatus.INTERNAL_SERVER_ERROR);
+        } finally {
+            resp = new JsonResp();
+        }
+
+        resp.success = true;
+        resp.message = "Cliente creado de manera satisfactoria";
+        resp.data = clienteNew;
+        return new ResponseEntity<JsonResp>(resp, HttpStatus.OK);
     }
 
     @PutMapping("/clientes/editar")
