@@ -1,5 +1,9 @@
 package com.learning.controllers;
 
+import java.io.IOException;
+import java.nio.file.Files;
+import java.nio.file.Path;
+import java.nio.file.Paths;
 import java.util.ArrayList;
 import java.util.Date;
 import java.util.List;
@@ -24,8 +28,10 @@ import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.PutMapping;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
+import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.ResponseStatus;
 import org.springframework.web.bind.annotation.RestController;
+import org.springframework.web.multipart.MultipartFile;
 
 @CrossOrigin()
 @RestController
@@ -63,8 +69,6 @@ public class ClienteController {
     }
 
 
-
-
     @GetMapping("/clientes/{id}")
     public ResponseEntity<JsonResp> showById(@PathVariable Long id) {
 
@@ -94,12 +98,8 @@ public class ClienteController {
 
         if (result.hasErrors()) {
 
-            // List<String> errors = new ArrayList<>();
-            // for (FieldError err : result.getFieldErrors()) {
-            //     errors.add("El campo '" + err.getField() + "' " + err.getDefaultMessage());
-            // };
 
-            List<String> errors = result.getFieldErrors()
+            List<String> errors =  result.getFieldErrors()
             .stream()
             .map(err -> "El campo '" + err.getField() + "' " + err.getDefaultMessage())
             .collect(Collectors.toList());
@@ -142,6 +142,49 @@ public class ClienteController {
     @ResponseStatus(HttpStatus.NO_CONTENT)
     public void delete(@PathVariable Long id) {
         clienteSerivice.delete(id);
+    }
+ 
+    @PostMapping("/clientes/upload/{id}")
+    public ResponseEntity<JsonResp> uploadImage(@RequestParam("archivo") MultipartFile archivo, @PathVariable Long id) {
+        
+        Cliente cliente;
+
+        try {
+            cliente = clienteSerivice.findById(id);
+        } catch (DataAccessException e) {
+            resp.success = false;
+            resp.message =  "Error en la base de datos al consultar usuario por id: " + id;
+            resp.error = e;
+            return new ResponseEntity<JsonResp>(resp, HttpStatus.INTERNAL_SERVER_ERROR);
+        }
+
+        if (!archivo.isEmpty()){
+            String imageName = archivo.getOriginalFilename();
+            Path rutaArchivo = Paths.get("clienteImagenes").resolve(imageName).toAbsolutePath();
+
+            try {
+                Files.copy(archivo.getInputStream(), rutaArchivo);
+            } catch (IOException e) {
+                resp.success = false;
+                resp.message =  "Error en servidor al momento de mover imagen";
+                resp.error = e;
+                return new ResponseEntity<JsonResp>(resp, HttpStatus.INTERNAL_SERVER_ERROR);
+            }
+
+            cliente.setFoto(imageName);
+            cliente = clienteSerivice.save(cliente);
+
+            resp.success = true;
+            resp.message =  "Imagen de cliente actualiozada correctamente";
+            resp.data = cliente;
+            return new ResponseEntity<JsonResp>(resp, HttpStatus.CREATED);
+
+            
+
+        }
+
+
+        return new ResponseEntity<JsonResp>(resp, HttpStatus.CREATED);
     }
 
 }
