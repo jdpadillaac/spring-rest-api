@@ -2,6 +2,7 @@ package com.learning.controllers;
 
 import java.io.File;
 import java.io.IOException;
+import java.net.MalformedURLException;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.Paths;
@@ -16,7 +17,10 @@ import com.learning.models.Cliente;
 import com.learning.models.JsonResp;
 import com.learning.service.cliente.ClienteService;
 import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.core.io.Resource;
+import org.springframework.core.io.UrlResource;
 import org.springframework.dao.DataAccessException;
+import org.springframework.http.HttpHeaders;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.validation.BindingResult;
@@ -38,7 +42,6 @@ import org.springframework.web.multipart.MultipartFile;
 @RestController
 @RequestMapping("/api")
 public class ClienteController {
-
 
     @Autowired
     private ClienteService clienteSerivice;
@@ -69,7 +72,6 @@ public class ClienteController {
         return new ResponseEntity<JsonResp>(resp, HttpStatus.OK);
     }
 
-
     @GetMapping("/clientes/{id}")
     public ResponseEntity<JsonResp> showById(@PathVariable Long id) {
 
@@ -86,7 +88,7 @@ public class ClienteController {
         resp.success = true;
         resp.message = "ok";
         resp.data = cliente;
-        return new ResponseEntity<>(resp, HttpStatus.OK);    
+        return new ResponseEntity<>(resp, HttpStatus.OK);
     }
 
     @PostMapping("/clientes/crear")
@@ -96,14 +98,11 @@ public class ClienteController {
         cliente.setCreateAt(new Date());
         Cliente clienteNew;
 
-
         if (result.hasErrors()) {
 
-
-            List<String> errors =  result.getFieldErrors()
-            .stream()
-            .map(err -> "El campo '" + err.getField() + "' " + err.getDefaultMessage())
-            .collect(Collectors.toList());
+            List<String> errors = result.getFieldErrors().stream()
+                    .map(err -> "El campo '" + err.getField() + "' " + err.getDefaultMessage())
+                    .collect(Collectors.toList());
 
             resp.success = false;
             resp.message = "Error de validación - Datos enviados incorrectamente";
@@ -144,11 +143,12 @@ public class ClienteController {
     public void delete(@PathVariable Long id) {
         clienteSerivice.delete(id);
     }
- 
+
     @PostMapping("/clientes/upload/{id}")
     public ResponseEntity<JsonResp> uploadImage(@RequestParam("archivo") MultipartFile archivo, @PathVariable Long id) {
-        
+
         // hacemos una isntancia de cliente
+        JsonResp respx = new JsonResp();
         Cliente cliente;
 
         try {
@@ -156,31 +156,31 @@ public class ClienteController {
             cliente = clienteSerivice.findById(id);
         } catch (DataAccessException e) {
             // En caso de haber un error en la consulta retornamos
-            resp.success = false;
-            resp.message =  "Error en la base de datos al consultar usuario por id: " + id;
-            resp.error = e;
+            respx.success = false;
+            respx.message = "Error en la base de datos al consultar usuario por id: " + id;
+            respx.error = e;
             return new ResponseEntity<JsonResp>(resp, HttpStatus.INTERNAL_SERVER_ERROR);
         }
 
         // Comprobamos si viene el archivo
-        if (!archivo.isEmpty()){
+        if (!archivo.isEmpty()) {
 
             // Obtenemos el nombre del archivo
             String imageName = archivo.getOriginalFilename();
 
             // Seleccionar una ruta externa para poder guardar la imagen
-            Path rutaArchivo = Paths.get("clienteImagenes").resolve(imageName).toAbsolutePath(); //se concatena la ruta de la imagen
-
+            Path rutaArchivo = Paths.get("clienteImagenes").resolve(imageName).toAbsolutePath(); // se concatena la ruta
+                                                                                                 // de la imagen
 
             try {
                 // Movemos el archivo a la ruta especidifcada
                 Files.copy(archivo.getInputStream(), rutaArchivo);
             } catch (IOException e) {
                 // en caso que qye haya una excpecion al manejar el aechivo
-                resp.success = false;
-                resp.message =  "Error en servidor al momento de mover imagen";
-                resp.error = e;
-                return new ResponseEntity<JsonResp>(resp, HttpStatus.INTERNAL_SERVER_ERROR);
+                respx.success = false;
+                respx.message = "Error en servidor al momento de mover imagen";
+                respx.error = e;
+                return new ResponseEntity<JsonResp>(respx, HttpStatus.INTERNAL_SERVER_ERROR);
             }
 
             // Cargamos la fopto del cliente
@@ -189,13 +189,13 @@ public class ClienteController {
             // Verificamos si existe una foto
             if (nombreFotoAnterior != null && nombreFotoAnterior.length() > 0) {
                 // Obtenemos el path del archivo si existe
-                Path rutaFotoAnterior =  Paths.get("clienteImagenes").resolve(nombreFotoAnterior).toAbsolutePath();
+                Path rutaFotoAnterior = Paths.get("clienteImagenes").resolve(nombreFotoAnterior).toAbsolutePath();
 
                 // Cargamos el archivo
                 File archivoFotoAnterior = rutaFotoAnterior.toFile();
 
                 // Si el archivo exite y es legible lo eliminanos
-                if (archivoFotoAnterior.exists() && archivoFotoAnterior.canRead()){
+                if (archivoFotoAnterior.exists() && archivoFotoAnterior.canRead()) {
                     archivoFotoAnterior.delete();
                 }
             }
@@ -205,16 +205,38 @@ public class ClienteController {
             // Actializamos cliente
             cliente = clienteSerivice.save(cliente);
 
-
             // Mensaje de respuesta
-            resp.success = true;
-            resp.message =  "Imagen de cliente actualiozada correctamente";
-            resp.data = cliente;
-            return new ResponseEntity<JsonResp>(resp, HttpStatus.CREATED);
+            respx.success = true;
+            respx.message = "Imagen de cliente actualiozada correctamente";
+            respx.data = cliente;
         }
-
-
-        return new ResponseEntity<JsonResp>(resp, HttpStatus.CREATED);
+        return new ResponseEntity<JsonResp>(respx, HttpStatus.CREATED);
     }
 
+
+    @GetMapping("/uploads/images/clienteImagen/{nombreFoto:.+}")
+    public ResponseEntity<Resource> getClienteFoto(@PathVariable String nombreFoto) {
+
+        // Obtenemos el path de la imagen
+        Path rutaArchico = Paths.get("clienteImagenes").resolve(nombreFoto).toAbsolutePath();
+
+        // Creamos el recuro
+        Resource recurso = null; ;
+
+        try {
+            recurso = new UrlResource(rutaArchico.toUri());
+        } catch (MalformedURLException e) {
+            e.printStackTrace();
+        }
+
+        if (!recurso.exists() && !recurso.isReadable()) {
+            throw new RuntimeException("No se pudo cargar la imagen: " + nombreFoto);
+        }
+
+        HttpHeaders cabecera = new HttpHeaders();
+        cabecera.add(HttpHeaders.CONTENT_DISPOSITION, "attachment; filename=\"" + recurso.getFilename() + "\"");
+
+
+        return new ResponseEntity<Resource>(recurso, cabecera, HttpStatus.OK);
+    }
 }
