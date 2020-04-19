@@ -1,5 +1,6 @@
 package com.learning.controllers;
 
+import java.io.File;
 import java.io.IOException;
 import java.nio.file.Files;
 import java.nio.file.Path;
@@ -147,40 +148,69 @@ public class ClienteController {
     @PostMapping("/clientes/upload/{id}")
     public ResponseEntity<JsonResp> uploadImage(@RequestParam("archivo") MultipartFile archivo, @PathVariable Long id) {
         
+        // hacemos una isntancia de cliente
         Cliente cliente;
 
         try {
+            // Bucamos cliente por id
             cliente = clienteSerivice.findById(id);
         } catch (DataAccessException e) {
+            // En caso de haber un error en la consulta retornamos
             resp.success = false;
             resp.message =  "Error en la base de datos al consultar usuario por id: " + id;
             resp.error = e;
             return new ResponseEntity<JsonResp>(resp, HttpStatus.INTERNAL_SERVER_ERROR);
         }
 
+        // Comprobamos si viene el archivo
         if (!archivo.isEmpty()){
+
+            // Obtenemos el nombre del archivo
             String imageName = archivo.getOriginalFilename();
-            Path rutaArchivo = Paths.get("clienteImagenes").resolve(imageName).toAbsolutePath();
+
+            // Seleccionar una ruta externa para poder guardar la imagen
+            Path rutaArchivo = Paths.get("clienteImagenes").resolve(imageName).toAbsolutePath(); //se concatena la ruta de la imagen
+
 
             try {
+                // Movemos el archivo a la ruta especidifcada
                 Files.copy(archivo.getInputStream(), rutaArchivo);
             } catch (IOException e) {
+                // en caso que qye haya una excpecion al manejar el aechivo
                 resp.success = false;
                 resp.message =  "Error en servidor al momento de mover imagen";
                 resp.error = e;
                 return new ResponseEntity<JsonResp>(resp, HttpStatus.INTERNAL_SERVER_ERROR);
             }
 
+            // Cargamos la fopto del cliente
+            String nombreFotoAnterior = cliente.getFoto();
+
+            // Verificamos si existe una foto
+            if (nombreFotoAnterior != null && nombreFotoAnterior.length() > 0) {
+                // Obtenemos el path del archivo si existe
+                Path rutaFotoAnterior =  Paths.get("clienteImagenes").resolve(nombreFotoAnterior).toAbsolutePath();
+
+                // Cargamos el archivo
+                File archivoFotoAnterior = rutaFotoAnterior.toFile();
+
+                // Si el archivo exite y es legible lo eliminanos
+                if (archivoFotoAnterior.exists() && archivoFotoAnterior.canRead()){
+                    archivoFotoAnterior.delete();
+                }
+            }
+
+            // Actualizamos la fonto de cliente
             cliente.setFoto(imageName);
+            // Actializamos cliente
             cliente = clienteSerivice.save(cliente);
 
+
+            // Mensaje de respuesta
             resp.success = true;
             resp.message =  "Imagen de cliente actualiozada correctamente";
             resp.data = cliente;
             return new ResponseEntity<JsonResp>(resp, HttpStatus.CREATED);
-
-            
-
         }
 
 
